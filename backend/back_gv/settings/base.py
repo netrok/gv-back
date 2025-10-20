@@ -1,7 +1,7 @@
 # backend/back_gv/settings/base.py
 from pathlib import Path
-import environ
 from datetime import timedelta
+import environ
 
 # =========================
 # Paths & .env
@@ -13,19 +13,13 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 # Inicializa django-environ
 env = environ.Env(DEBUG=(bool, True))
 
-# Intentar leer .env en dos ubicaciones:
-# 1) Un nivel ARRIBA de "backend/" => D:\...\gv-back\.env
-# 2) Dentro de "backend/"          => D:\...\gv-back\backend\.env
-_env_candidates = [
-    BASE_DIR.parent / ".env",
-    BASE_DIR / ".env",
-]
-for _p in _env_candidates:
+# Intentar leer .env en:
+# 1) Un nivel ARRIBA de "backend/" => <repo>/.env
+# 2) Dentro de "backend/"          => <repo>/backend/.env
+for _p in (BASE_DIR.parent / ".env", BASE_DIR / ".env"):
     if _p.exists():
         environ.Env.read_env(str(_p))
         break
-# Si no existe .env en ninguna, los env() usarán defaults
-# (también puedes definir vars en el entorno del sistema)
 
 # =========================
 # Core
@@ -43,7 +37,7 @@ CSRF_TRUSTED_ORIGINS = env.list(
         "http://127.0.0.1:8000",
     ],
 )
-# Nota: la env var se llama CORS_ORIGINS, la setting es CORS_ALLOWED_ORIGINS
+# Nota: la env var se llama CORS_ORIGINS; la setting es CORS_ALLOWED_ORIGINS
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ORIGINS",
     default=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -65,7 +59,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_spectacular",
     "simple_history",
-    "django_filters",  # usado en DEFAULT_FILTER_BACKENDS
+    "django_filters",
 
     # Apps propias
     "core",
@@ -157,6 +151,10 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    # por seguridad, todas las vistas requieren auth salvo que la vista declare algo distinto
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
     "DEFAULT_PAGINATION_CLASS": "core.pagination.DefaultPageNumberPagination",
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
@@ -164,6 +162,15 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
     ],
     "PAGE_SIZE": 25,
+    # Throttling básico (ajusta a gusto)
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "2000/hour",
+        "anon": "100/hour",
+    },
 }
 
 # =========================
@@ -176,7 +183,10 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
 
-    # 👇 Orden manual de grupos (tags)
+    # Si NO estás en DEBUG, sólo usuarios autenticados ven /api/docs y /api/schema
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"] if not DEBUG else [],
+
+    # Orden manual de grupos (tags)
     "TAGS": [
         {"name": "auth",          "description": "Autenticación y perfil (tokens, me, permisos)"},
         {"name": "cuentas",       "description": "Cuentas de usuario y permisos del sistema"},
@@ -194,19 +204,17 @@ SPECTACULAR_SETTINGS = {
         {"name": "health",        "description": "Healthchecks"},
     ],
 
-    # 👇 UI Swagger
+    # UI Swagger
     "SWAGGER_UI_SETTINGS": {
         "filter": True,                 # cuadro de búsqueda por operación
         "docExpansion": "list",         # colapsado por tag
         "defaultModelsExpandDepth": 0,  # oculta modelos por defecto
         "operationsSorter": "alpha",    # orden alfabético de operaciones dentro del tag
-        "tagsSorter": "manual",         # respeta el orden definido en TAGS
+        "tagsSorter": "manual",         # respeta el orden de TAGS
     },
 
-    # Hooks y enums
-    "POSTPROCESSING_HOOKS": [
-        "drf_spectacular.hooks.postprocess_schema_enums",
-    ],
+    # Enums y hooks
+    "POSTPROCESSING_HOOKS": ["drf_spectacular.hooks.postprocess_schema_enums"],
     "ENUM_NAME_OVERRIDES": {
         "EstadoSolicitudEnum": "core.enums.EstadoSolicitud",
         "TipoChecadaEnum": "core.enums.TipoChecada",
@@ -220,4 +228,24 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("ACCESS_TOKEN_LIFETIME_MIN", 60)),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("REFRESH_TOKEN_LIFETIME_DAYS", 7)),
     "AUTH_HEADER_TYPES": ("Bearer",),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
+
+# =========================
+# Sentry (opcional)
+# =========================
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    if env.bool("SENTRY_ENABLED", False):
+        sentry_sdk.init(
+            dsn=env("SENTRY_DSN"),
+            integrations=[DjangoIntegration()],
+            traces_sample_rate=float(env("SENTRY_TRACES_SAMPLE_RATE", default="0.0")),
+            profiles_sample_rate=float(env("SENTRY_PROFILES_SAMPLE_RATE", default="0.0")),
+            send_default_pii=False,
+        )
+except Exception:
+    # No interrumpas la app si Sentry no está configurado
+    pass

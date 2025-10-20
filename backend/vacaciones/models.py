@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import models
+from django.db.models import Q, F
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
@@ -18,9 +19,7 @@ User = get_user_model()
 # Políticas / Feriados / Balances
 # ===============================
 class PoliticaVacaciones(models.Model):
-    """
-    Política por años de antigüedad (rangos) con días asignados y arrastre.
-    """
+    """Política por años de antigüedad (rangos) con días asignados y arrastre."""
     anios_desde = models.PositiveSmallIntegerField(validators=[MinValueValidator(0)])
     anios_hasta = models.PositiveSmallIntegerField(validators=[MinValueValidator(0)])
     dias = models.PositiveSmallIntegerField(validators=[MinValueValidator(0), MaxValueValidator(365)])
@@ -35,7 +34,7 @@ class PoliticaVacaciones(models.Model):
         verbose_name_plural = "Políticas de vacaciones"
         constraints = [
             models.CheckConstraint(
-                check=models.Q(anios_hasta__gte=models.F("anios_desde")),
+                check=Q(anios_hasta__gte=F("anios_desde")),
                 name="vac_politica_rango_valido",
             ),
         ]
@@ -57,10 +56,7 @@ class Feriado(models.Model):
 
 
 class BalanceVacaciones(models.Model):
-    """
-    Balance anual por empleado.
-    Se actualiza con el endpoint/command de 'rebuild'.
-    """
+    """Balance anual por empleado. Se actualiza con el endpoint/command de 'rebuild'."""
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name="balances_vac")
     anio = models.PositiveIntegerField()
 
@@ -99,12 +95,12 @@ class SolicitudVacaciones(models.Model):
     dias_habiles = models.PositiveSmallIntegerField(default=0)
     comentario = models.CharField(max_length=255, blank=True, default="")
 
-    # Legacy (se mantiene para compatibilidad; opcional)
+    # Legacy (opcional)
     dias = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True,
         help_text="Días hábiles calculados (legacy decimal, sincronizado con dias_habiles)."
     )
-    motivo = models.CharField(max_length=255, blank=True, default="")  # si la versión anterior lo usaba
+    motivo = models.CharField(max_length=255, blank=True, default="")  # compat
 
     estado = models.CharField(
         max_length=5, choices=EstadoSolicitud.choices, default=EstadoSolicitud.PEND, db_index=True
@@ -133,13 +129,30 @@ class SolicitudVacaciones(models.Model):
     class Meta:
         ordering = ("-fecha_inicio", "-creado_en")
         indexes = [
+            models.Index(fields=["empleado", "estado"]),
+            models.Index(fields=["fecha_inicio"]),
+            models.Index(fields=["fecha_fin"]),
             models.Index(fields=["empleado", "estado", "fecha_inicio", "fecha_fin"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(fecha_fin__gte=F("fecha_inicio")),
+                name="vac_sol_rango_valido",
+            ),
+            models.CheckConstraint(
+                check=Q(dias_habiles__gte=0),
+                name="vac_sol_dias_habiles_no_negativos",
+            ),
+            models.CheckConstraint(
+                check=Q(dias__isnull=True) | Q(dias__gte=0),
+                name="vac_sol_dias_legacy_no_negativos",
+            ),
         ]
 
     def __str__(self):
         return f"Vac {self.empleado} {self.fecha_inicio}→{self.fecha_fin} [{self.estado}]"
 
-    # ===== Validaciones =====
+    # ===== Validaciones (lado Python) =====
     def clean(self):
         errors = {}
         if self.fecha_fin and self.fecha_inicio and self.fecha_fin < self.fecha_inicio:
@@ -153,29 +166,27 @@ class SolicitudVacaciones(models.Model):
 
     # ===== Cálculo de días =====
     def _feriados_en(self, desde: date, hasta: date):
-        """
-        Intenta usar fuente centralizada de feriados; si no existe, usa Feriado local.
-        """
+        """Intenta usar fuente centralizada; si no existe, usa Feriado local."""
         try:
             from core.workdays_sources import feriados_en  # opcional
             return list(feriados_en(desde, hasta))
         except Exception:
-            return list(Feriado.objects.filter(fecha__gte=desde, fecha__lte=hasta)
-                        .values_list("fecha", flat=True))
+            return list(
+                Feriado.objects.filter(fecha__gte=desde, fecha__lte=hasta)
+                .values_list("fecha", flat=True)
+            )
 
     def calcular_dias(self) -> int:
         """
-        Calcula días hábiles para el empleado respetando su horario (si está soportado).
-        Fallback: excluye fines de semana + feriados (modelo local).
+        Calcula hábiles respetando horario (si está soportado).
+        Fallback: lun-vie, excluyendo Feriado.
         """
         desde, hasta = self.fecha_inicio, self.fecha_fin
-        # Intentar función avanzada por empleado
         try:
             from core.workdays import dias_habiles_empleado  # soporta horarios
             fer = self._feriados_en(desde, hasta)
             return int(dias_habiles_empleado(self.empleado, desde, hasta, fer))
         except Exception:
-            # Fallback simple: lun-vie, excluyendo Feriado
             feriados = set(self._feriados_en(desde, hasta))
             total = 0
             cur = desde
@@ -186,17 +197,13 @@ class SolicitudVacaciones(models.Model):
             return total
 
     def _sincronizar_dias(self):
-        """
-        Mantiene sincronizados dias_habiles (int) y dias (decimal legacy).
-        """
+        """Sincroniza dias_habiles (int) y dias (decimal legacy)."""
         if self.dias_habiles is None:
             self.dias_habiles = 0
         self.dias = Decimal(self.dias_habiles)
 
     def guardar_con_calculo(self):
-        """
-        Calcula días y guarda. Rechaza rangos sin días hábiles.
-        """
+        """Calcula días y guarda. Rechaza rangos sin días hábiles."""
         self.dias_habiles = self.calcular_dias()
         if self.dias_habiles < 1:
             raise ValidationError({"dias_habiles": "El rango no contiene días hábiles."})

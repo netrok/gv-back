@@ -1,3 +1,4 @@
+# backend/empleados/models.py
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
 from django.contrib.auth import get_user_model
@@ -178,14 +179,21 @@ class Empleado(models.Model):
 
     class Meta:
         ordering = ("apellido_paterno", "apellido_materno", "primer_nombre")
+        verbose_name = "Empleado"
+        verbose_name_plural = "Empleados"
         indexes = [
+            # búsquedas frecuentes en listados/filtros
+            models.Index(fields=["estatus"]),
+            models.Index(fields=["unidad_negocio", "sucursal"]),
+            models.Index(fields=["area", "departamento"]),
+            models.Index(fields=["puesto"]),
+            models.Index(fields=["usuario"]),
+            # claves y docs ya tienen unique + db_index en campos, no repetir
             models.Index(fields=["estatus", "sucursal", "area", "departamento", "puesto"]),
             models.Index(fields=["curp"]),
             models.Index(fields=["rfc"]),
             models.Index(fields=["nss"]),
         ]
-        verbose_name = "Empleado"
-        verbose_name_plural = "Empleados"
 
     # ===== Validaciones simples usando core.utils =====
     def clean(self):
@@ -214,10 +222,7 @@ class Empleado(models.Model):
     def __str__(self):
         return f"{self.numero_empleado} - {self.nombre_completo}"
 
-    # ====== ALIAS DE COMPATIBILIDAD (para el resto del proyecto) ======
-    # Estos alias permiten que código que usa 'num_empleado' y 'nombres' siga funcionando.
-
-    # num_empleado <-> numero_empleado
+    # ====== ALIAS DE COMPATIBILIDAD ======
     @property
     def num_empleado(self):
         return self.numero_empleado
@@ -226,7 +231,6 @@ class Empleado(models.Model):
     def num_empleado(self, value: str):
         self.numero_empleado = value
 
-    # nombres <-> primer_nombre + segundo_nombre
     @property
     def nombres(self):
         seg = f" {self.segundo_nombre}" if self.segundo_nombre else ""
@@ -243,7 +247,6 @@ class Empleado(models.Model):
         self.primer_nombre = partes[0]
         self.segundo_nombre = " ".join(partes[1:]) if len(partes) > 1 else ""
 
-    # activo <-> estatus == "A"
     @property
     def activo(self) -> bool:
         return self.estatus == "A"
