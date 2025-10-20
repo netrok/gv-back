@@ -1,7 +1,8 @@
-from datetime import date, timedelta
+﻿from datetime import date, timedelta
 from typing import Dict, List, Tuple
 
 from django.utils.dateparse import parse_date
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -56,7 +57,7 @@ def _empleados_filtrados(params, user):
         OpenApiParameter("empleado", int, description="ID empleado (opcional)", required=False),
         OpenApiParameter("unidad_negocio", int, description="ID unidad (opcional)", required=False),
         OpenApiParameter("sucursal", int, description="ID sucursal (opcional)", required=False),
-        OpenApiParameter("area", int, description="ID área (opcional)", required=False),
+        OpenApiParameter("area", int, description="ID Ã¡rea (opcional)", required=False),
         OpenApiParameter("departamento", int, description="ID departamento (opcional)", required=False),
         OpenApiParameter("puesto", int, description="ID puesto (opcional)", required=False),
         OpenApiParameter("estado", str, description="Filtra estado: PEND/APROB/RECH/CANC (opcional)", required=False),
@@ -65,30 +66,40 @@ def _empleados_filtrados(params, user):
         OpenApiParameter("incluir_canceladas", bool, description="true/false (default false)", required=False),
     ],
     description=(
-        "Devuelve un calendario por empleado y día con ausencias de **vacaciones** y **permisos**. "
+        "Devuelve un calendario por empleado y dÃ­a con ausencias de **vacaciones** y **permisos**. "
         "Respeta filtros organizacionales y de estado. Usuario no staff solo ve su propio calendario."
     ),
     responses=CalendarioResponseSerializer,
 )
+@extend_schema(tags=["calendario"])
 class CalendarioAusenciasView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # --- Validación de rango ---
+        # --- ValidaciÃ³n de rango ---
         s_desde = request.query_params.get("desde")
         s_hasta = request.query_params.get("hasta")
         if not s_desde or not s_hasta:
-            return Response({"detail": "desde y hasta son requeridos (YYYY-MM-DD)."}, status=400)
+            return Response(
+                {"detail": "desde y hasta son requeridos (YYYY-MM-DD)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             d1 = parse_date(s_desde)
             d2 = parse_date(s_hasta)
             if not d1 or not d2 or d2 < d1:
                 raise ValueError
             if (d2 - d1).days > 62:
-                # Protección: máximo 2 meses para evitar respuestas gigantes
-                return Response({"detail": "Rango demasiado amplio. Máximo 62 días."}, status=400)
+                # ProtecciÃ³n: mÃ¡ximo 2 meses para evitar respuestas gigantes
+                return Response(
+                    {"detail": "Rango demasiado amplio. MÃ¡ximo 62 dÃ­as."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         except Exception:
-            return Response({"detail": "Formato de fecha inválido."}, status=400)
+            return Response(
+                {"detail": "Formato de fecha invÃ¡lido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Flags de estados
         incluir_pend = request.query_params.get("incluir_pendientes", "true").lower() != "false"
@@ -111,7 +122,7 @@ class CalendarioAusenciasView(APIView):
         # --- Empleados objetivos ---
         empleados = list(_empleados_filtrados(request.query_params, request.user))
 
-        # Si no hay empleados que ver, corta rápido
+        # Si no hay empleados que ver, corta rÃ¡pido
         if not empleados:
             return Response({
                 "desde": f"{d1:%Y-%m-%d}",
@@ -124,18 +135,26 @@ class CalendarioAusenciasView(APIView):
         emp_ids = [e.id for e in empleados]
 
         # --- Traer vacaciones y permisos traslapados con el rango ---
-        vac_qs = (SolicitudVacaciones.objects
-                  .select_related("empleado")
-                  .filter(empleado_id__in=emp_ids,
-                          estado__in=estados,
-                          fecha_inicio__lte=d2,
-                          fecha_fin__gte=d1))
-        per_qs = (Permiso.objects
-                  .select_related("empleado", "tipo")
-                  .filter(empleado_id__in=emp_ids,
-                          estado__in=estados,
-                          fecha_inicio__lte=d2,
-                          fecha_fin__gte=d1))
+        vac_qs = (
+            SolicitudVacaciones.objects
+            .select_related("empleado")
+            .filter(
+                empleado_id__in=emp_ids,
+                estado__in=estados,
+                fecha_inicio__lte=d2,
+                fecha_fin__gte=d1,
+            )
+        )
+        per_qs = (
+            Permiso.objects
+            .select_related("empleado", "tipo")
+            .filter(
+                empleado_id__in=emp_ids,
+                estado__in=estados,
+                fecha_inicio__lte=d2,
+                fecha_fin__gte=d1,
+            )
+        )
 
         # --- Armar mapa por (empleado_id, fecha) -> ausencia ---
         cells: Dict[Tuple[int, date], Dict] = {}
@@ -163,7 +182,7 @@ class CalendarioAusenciasView(APIView):
                     "id_solicitud": p.id,
                 }
 
-        # --- Construcción de respuesta: items por empleado con vector de días ---
+        # --- ConstrucciÃ³n de respuesta: items por empleado con vector de dÃ­as ---
         dias = [f"{d:%Y-%m-%d}" for d in _daterange(d1, d2)]
         items = []
         for e in empleados:
@@ -190,7 +209,8 @@ class CalendarioAusenciasView(APIView):
         return Response({
             "desde": f"{d1:%Y-%m-%d}",
             "hasta": f"{d2:%Y-%m-%d}",
-            "dias": dias,   # útil para armar headers en el front
+            "dias": dias,   # Ãºtil para armar headers en el front
             "items": items,
             "estados_solicitud_incluidos": estados,
         })
+

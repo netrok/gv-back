@@ -3,16 +3,33 @@ from pathlib import Path
 import environ
 from datetime import timedelta
 
-# === Paths & .env ===
+# =========================
+# Paths & .env
+# =========================
 # Este archivo está en: backend/back_gv/settings/base.py
 # BASE_DIR -> carpeta "backend/"
 BASE_DIR = Path(__file__).resolve().parents[2]
+
+# Inicializa django-environ
 env = environ.Env(DEBUG=(bool, True))
 
-# .env vive un nivel ARRIBA de "backend/":  C:\personal\python\gv-back\.env
-environ.Env.read_env(str(BASE_DIR.parent / ".env"))
+# Intentar leer .env en dos ubicaciones:
+# 1) Un nivel ARRIBA de "backend/" => D:\...\gv-back\.env
+# 2) Dentro de "backend/"          => D:\...\gv-back\backend\.env
+_env_candidates = [
+    BASE_DIR.parent / ".env",
+    BASE_DIR / ".env",
+]
+for _p in _env_candidates:
+    if _p.exists():
+        environ.Env.read_env(str(_p))
+        break
+# Si no existe .env en ninguna, los env() usarán defaults
+# (también puedes definir vars en el entorno del sistema)
 
-# === Core ===
+# =========================
+# Core
+# =========================
 SECRET_KEY = env("SECRET_KEY", default="django-insecure-change-me")
 DEBUG = env.bool("DEBUG", default=True)
 
@@ -26,6 +43,7 @@ CSRF_TRUSTED_ORIGINS = env.list(
         "http://127.0.0.1:8000",
     ],
 )
+# Nota: la env var se llama CORS_ORIGINS, la setting es CORS_ALLOWED_ORIGINS
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ORIGINS",
     default=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -97,7 +115,9 @@ TEMPLATES = [
     }
 ]
 
-# === Base de datos ===
+# =========================
+# Base de datos
+# =========================
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -109,22 +129,29 @@ DATABASES = {
     }
 }
 
-# === Localización ===
+# =========================
+# Localización
+# =========================
 LANGUAGE_CODE = "es-mx"
 TIME_ZONE = "America/Mexico_City"
 USE_I18N = True
 USE_TZ = True
 
-# === Archivos estáticos y media ===
+# =========================
+# Archivos estáticos y media
+# =========================
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR.parent / "staticfiles"  # útil para collectstatic en despliegues
+
 MEDIA_URL = "/media/"
 # MEDIA_ROOT fuera de backend/ para mantener portabilidad
 MEDIA_ROOT = (BASE_DIR.parent / env("UPLOADS_DIR", default="media")).resolve()
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# === DRF & OpenAPI ===
+# =========================
+# DRF
+# =========================
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -139,12 +166,44 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 25,
 }
 
+# =========================
+# OpenAPI / Swagger (drf-spectacular)
+# =========================
 SPECTACULAR_SETTINGS = {
     "TITLE": "GV RH API",
     "DESCRIPTION": "API de Recursos Humanos",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
+
+    # 👇 Orden manual de grupos (tags)
+    "TAGS": [
+        {"name": "auth",          "description": "Autenticación y perfil (tokens, me, permisos)"},
+        {"name": "cuentas",       "description": "Cuentas de usuario y permisos del sistema"},
+        {"name": "catalogos",     "description": "Catálogos (bancos, estados, turnos, etc.)"},
+        {"name": "organigrama",   "description": "Estructura: unidades, sucursales, áreas, ubicaciones"},
+        {"name": "empleados",     "description": "Gestión de empleados"},
+        {"name": "asistencia",    "description": "Checadas, justificaciones, resúmenes"},
+        {"name": "permisos",      "description": "Permisos con/sin goce, flujos de aprobación"},
+        {"name": "vacaciones",    "description": "Políticas, feriados, saldos y solicitudes"},
+        {"name": "calendario",    "description": "Calendario de ausencias"},
+        {"name": "reportes",      "description": "Reportes y consultas"},
+        {"name": "configuracion", "description": "Parámetros y configuración del sistema"},
+        {"name": "notificaciones","description": "Notificaciones y avisos"},
+        {"name": "auditoria",     "description": "Auditoría y trazabilidad"},
+        {"name": "health",        "description": "Healthchecks"},
+    ],
+
+    # 👇 UI Swagger
+    "SWAGGER_UI_SETTINGS": {
+        "filter": True,                 # cuadro de búsqueda por operación
+        "docExpansion": "list",         # colapsado por tag
+        "defaultModelsExpandDepth": 0,  # oculta modelos por defecto
+        "operationsSorter": "alpha",    # orden alfabético de operaciones dentro del tag
+        "tagsSorter": "manual",         # respeta el orden definido en TAGS
+    },
+
+    # Hooks y enums
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
     ],
@@ -154,7 +213,9 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
-# === JWT ===
+# =========================
+# JWT
+# =========================
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("ACCESS_TOKEN_LIFETIME_MIN", 60)),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("REFRESH_TOKEN_LIFETIME_DAYS", 7)),

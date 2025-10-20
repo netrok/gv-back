@@ -50,3 +50,7 @@ media/**
 
 # ---- Otros
 *.ipynb_checkpoints
+
+# === generated backups & temp ===
+backend/**/views.py.bak.*
+backend/tmp_schema.json

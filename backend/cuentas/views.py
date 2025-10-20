@@ -1,9 +1,9 @@
+﻿# backend/cuentas/views.py
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiExample
 
 from core.views import HealthBaseView
 from .serializers import UserMeSerializer, PermissionSerializer
@@ -12,25 +12,34 @@ User = get_user_model()
 
 
 # /cuentas/health/
+@extend_schema(tags=["health"])
 class HealthView(HealthBaseView):
     app_name = "cuentas"
 
 
 # /cuentas/auth/me/
+@extend_schema(tags=["auth"])
+@extend_schema(tags=["cuentas"])
+@extend_schema(tags=['auth','cuentas'])
 class MeView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserMeSerializer
 
     @extend_schema(
-        tags=["auth"],
         responses={200: UserMeSerializer},
         examples=[
             OpenApiExample(
                 "Ejemplo",
                 value={
-                    "id": 1, "username": "admin", "first_name": "Juan", "last_name": "Pérez",
-                    "email": "admin@demo.local", "is_active": True, "is_staff": True,
-                    "is_superuser": True, "groups": ["RRHH", "Admin"]
+                    "id": 1,
+                    "username": "admin",
+                    "first_name": "Juan",
+                    "last_name": "PÃ©rez",
+                    "email": "admin@demo.local",
+                    "is_active": True,
+                    "is_staff": True,
+                    "is_superuser": True,
+                    "groups": ["RRHH", "Admin"],
                 },
             )
         ],
@@ -41,12 +50,14 @@ class MeView(GenericAPIView):
 
 
 # /cuentas/auth/permissions/
+@extend_schema(tags=["auth"])
+@extend_schema(tags=["cuentas"])
+@extend_schema(tags=['auth','cuentas'])
 class PermissionsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PermissionSerializer
 
     @extend_schema(
-        tags=["auth"],
         responses={200: PermissionSerializer},
         examples=[
             OpenApiExample(
@@ -59,3 +70,5 @@ class PermissionsView(GenericAPIView):
         # Permisos efectivos del usuario (propios + por grupos)
         perms = sorted(list(request.user.get_all_permissions()))
         return Response({"permissions": perms})
+
+

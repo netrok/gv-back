@@ -1,5 +1,4 @@
-# backend/vacaciones/views.py
-from datetime import date
+﻿from datetime import date
 from decimal import Decimal
 
 from django.utils import timezone
@@ -24,12 +23,12 @@ from .serializers import (
     FeriadoSerializer,
     BalanceVacacionesSerializer,
     SolicitudVacacionesSerializer,
-    # Nuevo serializer de creación si lo tienes definido:
+    # Nuevo serializer de creaciÃ³n si lo tienes definido:
     # SolicitudVacacionesCreateSerializer,
 )
 from .utils import dias_habiles
 
-# Si tienes serializer de creación separado, descomenta la import y esta bandera
+# Si tienes serializer de creaciÃ³n separado, descomenta la import y esta bandera
 HAS_CREATE_SERIALIZER = False  # pon True si existe SolicitudVacacionesCreateSerializer
 
 
@@ -40,13 +39,15 @@ class IsStaffOrReadOnly(permissions.BasePermission):
         return bool(request.user and request.user.is_staff)
 
 
-# ======== POLÍTICAS ========
+# ======== POLÃTICAS ========
+@extend_schema(tags=["vacaciones"])
+@extend_schema(tags=["vacaciones"])
 class PoliticaViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrReadOnly]
     queryset = PoliticaVacaciones.objects.filter(activo=True)
     serializer_class = PoliticaVacacionesSerializer
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
-    search_fields = ["dias"]  # texto sobre int; ok para búsquedas simples
+    search_fields = ["dias"]  # texto sobre int; ok para bÃºsquedas simples
     filterset_fields = {
         "anios_desde": ["gte", "lte"],
         "anios_hasta": ["gte", "lte"],
@@ -55,6 +56,8 @@ class PoliticaViewSet(viewsets.ModelViewSet):
 
 
 # ======== FERIADOS ========
+@extend_schema(tags=["vacaciones"])
+@extend_schema(tags=["vacaciones"])
 class FeriadoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrReadOnly]
     queryset = Feriado.objects.all()
@@ -65,6 +68,8 @@ class FeriadoViewSet(viewsets.ModelViewSet):
 
 
 # ======== BALANCES (solo lectura) ========
+@extend_schema(tags=["vacaciones"])
+@extend_schema(tags=["vacaciones"])
 class BalanceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     queryset = BalanceVacaciones.objects.select_related("empleado").all()
@@ -83,9 +88,11 @@ class BalanceViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 # ======== SOLICITUDES (legacy) ========
+@extend_schema(tags=["vacaciones"])
+@extend_schema(tags=["vacaciones"])
 class SolicitudViewSet(viewsets.ModelViewSet):
     """
-    Vista histórica que opera sobre SolicitudVacaciones con campos
+    Vista histÃ³rica que opera sobre SolicitudVacaciones con campos
     como 'aprobado_por', 'aprobado_en', etc. Conservada por compatibilidad.
     """
     permission_classes = [permissions.IsAuthenticated]
@@ -103,7 +110,8 @@ class SolicitudViewSet(viewsets.ModelViewSet):
         "empleado": ["exact"],
         "estado": ["exact"],
         "fecha_inicio": ["gte", "lte", "exact"],
-        "fecha_fin": ["gte, lte", "exact"],
+        # âœ… corregido: lookups separados (no "gte, lte")
+        "fecha_fin": ["gte", "lte", "exact"],
     }
 
     def get_queryset(self):
@@ -118,7 +126,7 @@ class SolicitudViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         u = self.request.user
         empleado = serializer.validated_data.get("empleado")
-        # No staff: solo puede crear para sí mismo
+        # No staff: solo puede crear para sÃ­ mismo
         if not u.is_staff:
             if not hasattr(u, "empleado") or empleado != u.empleado:
                 raise PermissionDenied("No puedes crear solicitudes para otro empleado.")
@@ -130,7 +138,7 @@ class SolicitudViewSet(viewsets.ModelViewSet):
             OpenApiParameter("fecha_inicio", str, description="YYYY-MM-DD", required=True),
             OpenApiParameter("fecha_fin", str, description="YYYY-MM-DD", required=True),
         ],
-        description="Simula el cálculo de días hábiles (excluye fines de semana y feriados globales).",
+        description="Simula el cÃ¡lculo de dÃ­as hÃ¡biles (excluye fines de semana y feriados globales).",
     )
     @action(detail=False, methods=["get"], url_path="simular")
     def simular(self, request):
@@ -142,7 +150,7 @@ class SolicitudViewSet(viewsets.ModelViewSet):
             fi_d = date.fromisoformat(fi)
             ff_d = date.fromisoformat(ff)
         except Exception:
-            return Response({"detail": "Formato de fecha inválido"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Formato de fecha invÃ¡lido"}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"dias_habiles": dias_habiles(fi_d, ff_d)})
 
     @action(detail=True, methods=["post"], url_path="aprobar", permission_classes=[IsAdminUser])
@@ -228,6 +236,9 @@ def _dias_tomados_en_anio(empleado_id: int, anio: int) -> Decimal:
     return total
 
 
+@extend_schema(tags=["vacaciones"])
+
+
 class RebuildBalancesView(APIView):
     """
     POST admin-only para recalcular balances.
@@ -276,7 +287,7 @@ class RebuildBalancesView(APIView):
             pol = _politica_para_anios(anios)
             dias_asignados = Decimal(getattr(pol, "dias", 0) if pol else 0)
 
-            # Arrastre desde el año previo, respetando arrastre_maximo si existe
+            # Arrastre desde el aÃ±o previo, respetando arrastre_maximo si existe
             arrastre = Decimal("0.00")
             if pol:
                 prev = BalanceVacaciones.objects.filter(empleado=emp, anio=anio - 1).first()
@@ -302,10 +313,11 @@ class RebuildBalancesView(APIView):
 
 
 # ======== NUEVO: SolicitudVacacionesViewSet (v2) ========
-# Usa métodos aprobar/rechazar/cancelar del modelo (si existen)
+# Usa mÃ©todos aprobar/rechazar/cancelar del modelo (si existen)
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from core.permissions import IsAuthenticatedReadOnlyOrRRHH, IsRRHHEditOnly
 
+@extend_schema(tags=["vacaciones"])
 @extend_schema(tags=["vacaciones"])
 class SolicitudVacacionesViewSet(viewsets.ModelViewSet):
     queryset = SolicitudVacaciones.objects.select_related("empleado").all()
@@ -339,7 +351,7 @@ class SolicitudVacacionesViewSet(viewsets.ModelViewSet):
         if hasattr(obj, "aprobar"):
             obj.aprobar(request.user)
         else:
-            # fallback a lógica simple si el modelo no trae método
+            # fallback a lÃ³gica simple si el modelo no trae mÃ©todo
             obj.estado = "APROB"
             obj.resuelto_por = request.user if hasattr(obj, "resuelto_por") else None
             obj.resuelto_en = timezone.now() if hasattr(obj, "resuelto_en") else None
@@ -369,3 +381,5 @@ class SolicitudVacacionesViewSet(viewsets.ModelViewSet):
             obj.resuelto_en = timezone.now() if hasattr(obj, "resuelto_en") else None
             obj.save()
         return Response(SolicitudVacacionesSerializer(obj).data)
+
+

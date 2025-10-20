@@ -1,6 +1,7 @@
-from rest_framework import viewsets, permissions, filters, status
+﻿from rest_framework import viewsets, permissions, filters, status, parsers
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.filters import OrderingFilter, SearchFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
@@ -10,6 +11,7 @@ from .serializers import EmpleadoSerializer, EmpleadoFotoSerializer
 
 
 # /empleados/health/
+@extend_schema(tags=["health"])
 class HealthView(HealthBaseView):
     app_name = "empleados"
 
@@ -17,31 +19,35 @@ class HealthView(HealthBaseView):
 class IsStaffOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
         if request.method in ("GET", "HEAD", "OPTIONS"):
-            return request.user and request.user.is_authenticated
-        return request.user and request.user.is_staff
+            return bool(request.user and request.user.is_authenticated)
+        return bool(request.user and request.user.is_staff)
 
 
+@extend_schema(tags=["empleados"])
+@extend_schema(tags=["empleados"])
 class EmpleadoViewSet(viewsets.ModelViewSet):
     """
     CRUD de Empleado con:
-    - búsqueda: ?search= (nombre, número, RFC, CURP, NSS, email)
+    - bÃºsqueda: ?search= (nombre, nÃºmero, RFC, CURP, NSS, email)
     - filtros: estatus, sucursal, area, departamento, puesto, unidad_negocio
-    - paginación DRF estándar
-    - restricción: usuario NO staff solo ve su propio expediente (si está ligado)
+    - restricciÃ³n: usuario NO staff solo ve su propio expediente (si estÃ¡ ligado)
     """
     permission_classes = [IsStaffOrReadOnly]
-    queryset = Empleado.objects.select_related(
-        "banco", "escolaridad",
-        "domicilio_estado", "domicilio_municipio",
-        "nacimiento_estado", "nacimiento_municipio",
-        "unidad_negocio", "sucursal", "area", "departamento",
-        "puesto", "turno", "horario", "supervisor", "usuario",
-    ).all()
+    queryset = (
+        Empleado.objects.select_related(
+            "banco", "escolaridad",
+            "domicilio_estado", "domicilio_municipio",
+            "nacimiento_estado", "nacimiento_municipio",
+            "unidad_negocio", "sucursal", "area", "departamento",
+            "puesto", "turno", "horario", "supervisor", "usuario",
+        ).all()
+    )
     serializer_class = EmpleadoSerializer
 
-    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = [
-        "numero_empleado", "primer_nombre", "segundo_nombre", "apellido_paterno", "apellido_materno",
+        "numero_empleado", "primer_nombre", "segundo_nombre",
+        "apellido_paterno", "apellido_materno",
         "rfc", "curp", "nss", "email_personal", "email_corporativo",
     ]
     filterset_fields = {
@@ -57,11 +63,16 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
         "banco": ["exact"],
         "escolaridad": ["exact"],
     }
+    # Solo campos seguros y comunes para ordenar
+    ordering_fields = [
+        "id", "numero_empleado", "primer_nombre", "apellido_paterno",
+    ]
+    ordering = ["numero_empleado"]
 
     def get_queryset(self):
         qs = super().get_queryset()
         u = self.request.user
-        # Usuario normal autenticado (no staff): solo su propio registro (si está ligado)
+        # Usuario autenticado no staff: solo su propio registro (si estÃ¡ ligado a usuario)
         if u.is_authenticated and not u.is_staff:
             return qs.filter(usuario=u)
         return qs
@@ -88,7 +99,12 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
 
     # /empleados/{id}/foto/ (POST: multipart)
     @extend_schema(request=EmpleadoFotoSerializer, responses=EmpleadoFotoSerializer, tags=["empleados"])
-    @action(detail=True, methods=["post"], url_path="foto")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="foto",
+        parser_classes=[parsers.MultiPartParser, parsers.FormParser],
+    )
     def subir_foto(self, request, pk=None):
         empleado = self.get_object()
         serializer = EmpleadoFotoSerializer(empleado, data=request.data, partial=True)
@@ -96,3 +112,4 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
