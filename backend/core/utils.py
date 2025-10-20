@@ -1,0 +1,11 @@
+import re
+CURP_RE = re.compile(r"^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$")
+RFC_RE  = re.compile(r"^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$")
+NSS_RE  = re.compile(r"^\d{11}$")
+CLABE_RE= re.compile(r"^\d{18}$")
+CP_RE   = re.compile(r"^\d{5}$")
+def validar_curp(v:str)->bool: return bool(CURP_RE.match(v.upper()))
+def validar_rfc(v:str)->bool:  return bool(RFC_RE.match(v.upper()))
+def validar_nss(v:str)->bool:  return bool(NSS_RE.match(v))
+def validar_clabe(v:str)->bool:return bool(CLABE_RE.match(v))
+def validar_cp(v:str)->bool:   return bool(CP_RE.match(v))

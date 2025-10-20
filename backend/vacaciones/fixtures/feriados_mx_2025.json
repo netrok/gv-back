@@ -1,0 +1,12 @@
+[
+  {"model": "vacaciones.feriado", "pk": 20250101, "fields": {"fecha": "2025-01-01", "nombre": "Año Nuevo"}},
+  {"model": "vacaciones.feriado", "pk": 20250203, "fields": {"fecha": "2025-02-03", "nombre": "Día de la Constitución (1er lunes feb)"}},
+  {"model": "vacaciones.feriado", "pk": 20250317, "fields": {"fecha": "2025-03-17", "nombre": "Natalicio de Benito Juárez (3er lunes mar)"}},
+  {"model": "vacaciones.feriado", "pk": 20250417, "fields": {"fecha": "2025-04-17", "nombre": "Jueves Santo (no oficial, opcional)"}},
+  {"model": "vacaciones.feriado", "pk": 20250418, "fields": {"fecha": "2025-04-18", "nombre": "Viernes Santo (no oficial, opcional)"}},
+  {"model": "vacaciones.feriado", "pk": 20250501, "fields": {"fecha": "2025-05-01", "nombre": "Día del Trabajo"}},
+  {"model": "vacaciones.feriado", "pk": 20250505, "fields": {"fecha": "2025-05-05", "nombre": "Batalla de Puebla (oficial)"}},
+  {"model": "vacaciones.feriado", "pk": 20250916, "fields": {"fecha": "2025-09-16", "nombre": "Independencia de México"}},
+  {"model": "vacaciones.feriado", "pk": 20251117, "fields": {"fecha": "2025-11-17", "nombre": "Revolución Mexicana (3er lunes nov)"}},
+  {"model": "vacaciones.feriado", "pk": 20251225, "fields": {"fecha": "2025-12-25", "nombre": "Navidad"}}
+]

@@ -1,0 +1,52 @@
+﻿# ---- Entorno / dependencias
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+pip-wheel-metadata/
+
+# ---- Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+.coverage*
+htmlcov/
+*.coverage
+*.pyproj
+*.pkl
+
+# ---- IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.code-workspace
+
+# ---- Django
+*.sqlite3
+db.sqlite3
+staticfiles/
+static_root/
+media/
+media/**
+
+# ---- Config secreta
+.env
+.env.*
+*.key
+*.pem
+
+# ---- Logs
+*.log
+
+# ---- Otros
+*.ipynb_checkpoints
